@@ -83,4 +83,8 @@ Fixed-IP NIC provisioning and deployment through Terraform/OpenTofu are future w
 
 ## Terraform/OpenTofu prototype
 
-See [terraform/README.md](terraform/README.md) for the first standalone prototype with a pre-created NIC and an ASCII YAML configuration disk. It uses a staged CLI bootstrap followed by Terraform import to attach all disks before first boot. Locally validated; STACKIT deployment testing is still pending.
+See [terraform/README.md](terraform/README.md) for the first standalone prototype with a pre-created NIC and an ASCII YAML configuration disk. It uses a staged CLI bootstrap followed by Terraform import to attach all disks before first boot. The Anvil installation and password bootstrap have been confirmed on STACKIT; DSX testing is still pending.
+
+### Adding a DSX
+
+The [DSX Terraform workflow](terraform/dsx/README.md) adds one DSX to an existing standalone Anvil with its own NIC, boot/data/config disks and Terraform state. The Anvil bootstrap has been confirmed on STACKIT; the DSX extension awaits live validation. Data volume registration is explicit by default to avoid registering the config disk as storage.

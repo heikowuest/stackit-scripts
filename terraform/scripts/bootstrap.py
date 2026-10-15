@@ -11,6 +11,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import ssl
+import urllib.request
 
 GENERATED = Path(".generated")
 
@@ -32,7 +34,8 @@ def write_raw(path, text):
         f.write(b"\n" * (2 * 1024 * 1024))
         f.truncate(1024 ** 3)
 
-def yaml_config(network, hostname, domain, ntp, password, interface):
+def yaml_config(network, hostname, domain, ntp, password, interface,
+                role="anvil", register_volumes=False):
     # JSON-quoted scalars are valid YAML and safely escape punctuation.
     q = lambda value: json.dumps(value, ensure_ascii=True)
     address = str(ipaddress.IPv4Address(network["ip"]))
@@ -43,6 +46,20 @@ def yaml_config(network, hostname, domain, ntp, password, interface):
     if not network["dns"]:
         raise ValueError("Network has no DNS servers")
     dns = "\n".join("    - " + q(str(ipaddress.ip_address(ip))) for ip in network["dns"])
+    if role not in ("anvil", "dsx"):
+        raise ValueError("Unknown role")
+    metadata = ""
+    network_cluster = ""
+    node_role = "  ha_mode: Standalone\n  features:\n    - metadata\n"
+    if role == "dsx":
+        anvil_ip = str(ipaddress.IPv4Address(network["anvil_ip"]))
+        metadata = "  metadata:\n    ips:\n      - " + q(anvil_ip) + "\n"
+        network_cluster = "      cluster_ips:\n        - " + q(anvil_ip) + "\n"
+        node_role = (
+            "  features:\n    - storage\n    - portal\n"
+            "  add_node: true\n"
+            "  add_volumes: " + ("true" if register_volumes else "false") + "\n"
+        )
     return (
         "cluster:\n"
         "  password: " + q(password) + "\n"
@@ -50,13 +67,14 @@ def yaml_config(network, hostname, domain, ntp, password, interface):
         "  dns_servers:\n" + dns + "\n"
         "  gateway:\n    ipv4_default: " + q(gateway) + "\n"
         "  ntp_servers:\n" + "".join("    - " + q(n) + "\n" for n in ntp) +
-        "node:\n"
-        "  ha_mode: Standalone\n"
+        metadata +
+        "node:\n" +
+        node_role +
         "  hostname: " + q(hostname) + "\n"
-        "  features:\n    - metadata\n"
         "  networks:\n    " + q(interface) + ":\n"
         "      dhcp: false\n"
         "      ips:\n        - " + q(address + "/" + str(prefix)) + "\n"
+        + network_cluster +
         "      roles:\n        - data\n        - mgmt\n"
         "      mtu: 1500\n"
         "version: '1'\n"
@@ -68,12 +86,29 @@ def prepare(args):
     if not shutil.which("qemu-img"):
         raise RuntimeError("qemu-img is required")
     network = output(args.tool, "network")
+    if network.get("role", "anvil") != args.role:
+        raise ValueError("Wrong working directory/state for this role")
     password = getpass.getpass("Hammerspace admin password: ")
     if not password or not any(not c.isalnum() for c in password):
         raise ValueError("Password must include a non-alphanumeric character")
     if password != getpass.getpass("Confirm password: "):
         raise ValueError("Passwords differ")
-    text = yaml_config(network, args.hostname, args.domain, args.ntp, password, args.interface)
+    if args.role == "dsx":
+        # Check the existing cluster before producing a disk with a wrong password.
+        endpoint = str(ipaddress.IPv4Address(network["anvil_ip"]))
+        import base64
+        request = urllib.request.Request(
+            "https://" + endpoint + ":8443/mgmt/v1.2/rest/nodes",
+            headers={"Authorization": "Basic " + base64.b64encode(
+                ("admin:" + password).encode("utf-8")).decode("ascii")})
+        # PoC appliances use self-signed certificates, matching the curl -k check.
+        with urllib.request.urlopen(request, timeout=30,
+                                    context=ssl._create_unverified_context()) as response:
+            if response.status != 200:
+                raise ValueError("Anvil management API is not ready")
+    hostname = args.hostname or ("hs-dsx-01" if args.role == "dsx" else "hs-anvil-01")
+    text = yaml_config(network, hostname, args.domain, args.ntp, password, args.interface,
+                       role=args.role, register_volumes=args.register_volumes)
     GENERATED.mkdir(mode=0o700, exist_ok=True)
     os.chmod(GENERATED, 0o700)
     raw = GENERATED / "config.raw"
@@ -107,6 +142,8 @@ def init_artifacts():
 
 def create(args):
     data = output(args.tool, "bootstrap")
+    if data.get("role", "anvil") != getattr(args, "role", "anvil"):
+        raise ValueError("Wrong working directory/state for this role")
     if any(not data.get(k) for k in
            ("project_id", "region", "name", "nic_id", "boot_id", "metadata_id", "config_id")):
         raise ValueError("Infrastructure outputs incomplete; apply the volume targets first")
@@ -145,11 +182,13 @@ def create(args):
         raise ValueError("No server ID returned; inspect STACKIT before retrying")
     print("Server ID:", server_id)
     state = set(tf(args.tool, "state", "list", capture=True).splitlines())
+    role = getattr(args, "role", "anvil")
     base = data["project_id"] + "," + data["region"] + "," + server_id
     imports = [
-        ("stackit_server.anvil", base),
+        ("stackit_server." + role, base),
         ("stackit_server_volume_attach.config", base + "," + data["config_id"]),
-        ("stackit_server_volume_attach.metadata", base + "," + data["metadata_id"]),
+        ("stackit_server_volume_attach." + ("data" if role == "dsx" else "metadata"),
+         base + "," + data["metadata_id"]),
     ]
     for address, identifier in imports:
         if address not in state:
@@ -158,11 +197,14 @@ def create(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--role", choices=["anvil", "dsx"], default="anvil")
     parser.add_argument("--tool", choices=["terraform", "tofu"], default="terraform")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init-artifacts")
     p = sub.add_parser("prepare")
-    p.add_argument("--hostname", default="hs-anvil-01")
+    p.add_argument("--hostname", help="Defaults to hs-anvil-01 or hs-dsx-01")
+    p.add_argument("--register-volumes", action="store_true",
+                   help="DSX: register ALL discovered disks, including the config disk; cleanup required")
     p.add_argument("--domain", required=True)
     p.add_argument("--ntp", nargs="+", required=True)
     p.add_argument("--interface", default="eth0",
@@ -178,7 +220,7 @@ def main():
             prepare(args)
         else:
             create(args)
-    except (RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
+    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
         print("ERROR:", exc, file=sys.stderr)
         return 1
     return 0

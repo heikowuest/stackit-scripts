@@ -1,5 +1,6 @@
 output "network" {
   value = {
+    role    = "anvil"
     ip      = stackit_network_interface.anvil.ipv4
     prefix  = data.stackit_network.existing.ipv4_prefix_length
     gateway = data.stackit_network.existing.ipv4_gateway
@@ -8,6 +9,7 @@ output "network" {
 }
 output "bootstrap" {
   value = {
+    role              = "anvil"
     project_id        = var.project_id
     region            = var.region
     name              = var.name
