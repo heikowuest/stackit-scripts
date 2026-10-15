@@ -10,6 +10,30 @@ Bash scripts for uploading a Hammerspace appliance image to STACKIT and deployin
 - Select the intended project/region in the CLI and match the configuration blocks in both scripts. The scripts currently contain PoC-specific IDs: replace project, network, image, availability zone, and VM name as appropriate. Configuration is edited in the scripts, not passed as command-line arguments.
 - Obtain the Hammerspace QCOW2 image separately; it is not distributed here.
 
+## Authenticate the CLI
+
+In the STACKIT Portal, select the target project and open **IAM and Management > Service accounts**. Select a service account with the required project permissions, open **Service Account Keys**, choose **+ Create service account key > Create new key pair**, optionally set an expiry, and select **Create**. Download/save the generated service-account JSON securely on the Linux host as, for example, `$HOME/.config/stackit/hammerspace.json` (outside this repository).
+
+Use the generated key-pair flow for this example. If you upload your own public key instead, the generated JSON does not include the private key and requires separate private-key configuration. See the [official STACKIT key instructions](https://docs.stackit.cloud/platform/access-and-identity/service-accounts/how-tos/manage-service-account-keys/).
+
+Run the following directly in the shell; no local `auth-*.sh` script is required. Replace `<PROJECT_ID>` with your target project ID:
+
+```bash
+chmod 600 "$HOME/.config/stackit/hammerspace.json"
+
+export STACKIT_SERVICE_ACCOUNT_KEY_PATH="$HOME/.config/stackit/hammerspace.json"
+
+stackit auth activate-service-account
+stackit config set --project-id "<PROJECT_ID>"
+stackit config list
+
+# Verify access before uploading or deploying
+stackit image list
+stackit server list
+```
+
+The exported path applies to the current shell; set it again in a new shell before activating the service account. Match the CLI project to `PROJECT_ID` in both scripts. Never paste the JSON contents into this repository.
+
 ## 1. Upload the image
 
 Current tested image: **Hammerspace `5.2.14-1267`**, file `hammerspace-5.2.14-1267.qcow2`.
