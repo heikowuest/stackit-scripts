@@ -1,6 +1,8 @@
 cat > .gitignore <<'EOF'
 # STACKIT credentials / service account keys
 *.json
+
+# scripts starting with auth- are ignored
 auth-*.sh
 
 # VM images
@@ -9,7 +11,7 @@ auth-*.sh
 *.iso
 
 # Customer-specific files
-filmakademie*
+customer1*
 
 # Editor / temporary files
 *~
