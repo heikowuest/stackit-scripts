@@ -1,0 +1,18 @@
+cat > .gitignore <<'EOF'
+# STACKIT credentials / service account keys
+*.json
+auth-*.sh
+
+# VM images
+*.qcow2
+*.raw
+*.iso
+
+# Customer-specific files
+filmakademie*
+
+# Editor / temporary files
+*~
+*.swp
+*.tmp
+EOF
