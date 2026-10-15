@@ -71,9 +71,15 @@ resource "stackit_server" "anvil" {
   }
   lifecycle {
     prevent_destroy = true
-    # The API does not return source_id/source_type during import.
-    # The separately managed boot volume remains authoritative.
-    ignore_changes = [boot_volume]
+    # Import cannot reconstruct the original boot source or agent policy.
+    # Provider 0.120.0 also drops imported NIC IDs when no prior list exists.
+    # Bootstrap sets these explicitly; verify actual attachments via STACKIT.
+    # NIC and boot volume resources remain managed independently.
+    ignore_changes = [
+      boot_volume,
+      network_interfaces,
+      agent.provisioning_policy,
+    ]
   }
 }
 resource "stackit_server_volume_attach" "config" {
