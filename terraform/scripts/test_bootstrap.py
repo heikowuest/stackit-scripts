@@ -108,6 +108,25 @@ class BootstrapTests(unittest.TestCase):
                 b.prepare(args)
             writer.assert_not_called()
 
+    def test_skip_anvil_check_builds_disk_without_network_request(self):
+        args = SimpleNamespace(tool="terraform", role="dsx", skip_anvil_check=True,
+                               hostname="hs-dsx-01", domain="poc.example",
+                               ntp=["pool.ntp.org"], interface="eth0", register_volumes=False)
+        network = dict(role="dsx", ip="192.0.2.8", prefix=24,
+                       gateway="192.0.2.1", dns=["192.0.2.53"], anvil_ip="192.0.2.7")
+        generated = MagicMock()
+        generated.__truediv__.return_value.exists.return_value = False
+        with patch.object(b.os, "name", "posix"), patch.object(b.os, "chmod"), patch.object(b.shutil, "which", return_value="qemu-img"), patch.object(b, "output", return_value=network), patch.object(b.getpass, "getpass", return_value="test" + "!"), patch.object(b.urllib.request, "urlopen") as request, patch.object(b, "GENERATED", generated), patch.object(b, "write_raw") as writer, patch.object(b, "run") as runner:
+            b.prepare(args)
+            request.assert_not_called()
+            writer.assert_called_once()
+            yaml = writer.call_args.args[1]
+            self.assertIn('192.0.2.7', yaml)
+            self.assertIn('192.0.2.8/24', yaml)
+            self.assertIn('add_node: true', yaml)
+            runner.assert_called_once()
+            self.assertEqual(runner.call_args.args[0][:2], ["qemu-img", "convert"])
+
     def test_wrong_state_role_rejected_before_cli(self):
         with patch.object(b, "output", return_value={"role":"anvil"}), patch.object(b, "run") as runner:
             with self.assertRaises(ValueError):

@@ -57,6 +57,19 @@ it against https://ANVIL_IP:8443/mgmt/v1.2/rest/nodes before building the config
 disk. Self-signed certificates are accepted for this PoC (as with curl -k).
 A password/API/network failure stops preparation; it does not create a DSX VM.
 
+If the deploying host has no route/VPN into the private STACKIT network, skip only
+this deploy-host API/password check:
+
+```bash
+python3 ../scripts/bootstrap.py --role dsx prepare \\
+  --domain poc.example --ntp pool.ntp.org --interface eth0 --skip-anvil-check
+```
+
+The existing Anvil password must still be supplied correctly. YAML generation,
+password confirmation, assigned static DSX IP and Anvil join address are unchanged.
+The DSX joins the Anvil from inside STACKIT. This flag does not bypass cluster
+authentication or change any security-group rules. By default the API check remains enabled.
+
 The DSX YAML uses static IPv4 assigned to its own STACKIT NIC, cluster.metadata.ips
 pointing at the Anvil, storage/portal features and add_node=true. GenericProv's
 ASCII YAML disk mechanism is reused. All disks are attached at VM creation,

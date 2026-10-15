@@ -93,7 +93,9 @@ def prepare(args):
         raise ValueError("Password must include a non-alphanumeric character")
     if password != getpass.getpass("Confirm password: "):
         raise ValueError("Passwords differ")
-    if args.role == "dsx":
+    if args.role == "dsx" and getattr(args, "skip_anvil_check", False):
+        print("Skipping Anvil API check; use the existing cluster admin password.")
+    if args.role == "dsx" and not getattr(args, "skip_anvil_check", False):
         # Check the existing cluster before producing a disk with a wrong password.
         endpoint = str(ipaddress.IPv4Address(network["anvil_ip"]))
         import base64
@@ -203,6 +205,8 @@ def main():
     sub.add_parser("init-artifacts")
     p = sub.add_parser("prepare")
     p.add_argument("--hostname", help="Defaults to hs-anvil-01 or hs-dsx-01")
+    p.add_argument("--skip-anvil-check", action="store_true",
+                   help="Skip the deploy-host Anvil API/password check when it has no private-network access")
     p.add_argument("--register-volumes", action="store_true",
                    help="DSX: register ALL discovered disks, including the config disk; cleanup required")
     p.add_argument("--domain", required=True)
