@@ -9,7 +9,7 @@ managed or recreated by this DSX state.
 
 Same clean Hammerspace 5.2.14-1267 image (uefi=false), region/AZ and authentication
 as the Anvil. DSX defaults: g1a.16d (the already tested VM type), 200 GB boot and
-100 GB data, both storage_premium_perf1, plus a 1 GB config disk. Agent NEVER.
+1000 GB data, both storage_premium_perf1, plus a 1 GB config disk. Agent NEVER.
 These are PoC defaults, not a production sizing recommendation.
 
 Security groups must allow bidirectional Anvil/DSX communication, including Salt
@@ -86,7 +86,7 @@ Anvil management URL remains the Anvil IP; DSX management_url is diagnostic.
 Default add_volumes=false deliberately joins the DSX without automatically
 registering its discovered disks as cluster volumes. Hammerspace may format
 ALL non-boot disks during DSX first boot, including the 1 GB config disk, even
-with add_volumes=false. After joining, register only the intended 100 GB data
+with add_volumes=false. After joining, register only the intended 1000 GB data
 volume; do not register the small config disk.
 
 Optional prepare --register-volumes sets add_volumes=true. This can register the
@@ -109,6 +109,6 @@ described in the parent README.
 ## Validation status
 
 Anvil installation, static IP and admin password via ASCII config disk have been
-confirmed in the user-run STACKIT PoC. The DSX extension needs its first live test.
+confirmed in the user-run STACKIT PoC. DSX creation/join and local-volume state must be verified on resume.
 No Nebius-specific GRUB/phantom-disk patches are applied. No HA is configured.
 Keep generated disks, state, tfvars and credentials outside Git.

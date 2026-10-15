@@ -48,7 +48,7 @@ variable "anvil_ip" {
 }
 variable "data_volume_size" {
   type    = number
-  default = 100
+  default = 1000
   validation {
     condition     = var.data_volume_size >= 10
     error_message = "Use at least 10 GB for the PoC DSX data volume."
