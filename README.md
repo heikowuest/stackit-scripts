@@ -80,3 +80,7 @@ Fixed-IP NIC provisioning and deployment through Terraform/OpenTofu are future w
 `.gitignore` excludes JSON files (`*.json`, including service-account keys), local auth scripts (`auth-*.sh`), QCOW2/raw/ISO images, and customer-specific file patterns.
 
 **Never commit credentials, passwords, tokens, authentication scripts, service-account JSON keys, QCOW2 images, or customer-specific data.** Keep these outside version control and verify ignore coverage for any new filenames; ignore rules do not protect files already tracked by Git.
+
+## Terraform/OpenTofu prototype
+
+See [terraform/README.md](terraform/README.md) for the first standalone prototype with a pre-created NIC and an ASCII YAML configuration disk. It uses a staged CLI bootstrap followed by Terraform import to attach all disks before first boot. Locally validated; STACKIT deployment testing is still pending.

@@ -1,0 +1,5 @@
+project_id         = "<PROJECT_ID>"
+network_id         = "<NETWORK_ID>"
+image_id           = "<HAMMERSPACE_IMAGE_ID>"
+security_group_ids = ["<SECURITY_GROUP_ID>"]
+# ipv4 = "192.0.2.10" # Set only to a free address within YOUR network.
