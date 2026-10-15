@@ -23,8 +23,12 @@ output "bootstrap" {
   }
 }
 output "management_url" {
-  value = "https://${stackit_network_interface.dsx.ipv4}:8443"
+  value = "https://${var.anvil_ip}:8443"
 }
 output "server_id" {
   value = stackit_server.dsx.server_id
+}
+
+output "dsx_ip" {
+  value = stackit_network_interface.dsx.ipv4
 }
