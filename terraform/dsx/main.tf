@@ -11,10 +11,11 @@ resource "stackit_network_interface" "dsx" {
   security_group_ids = var.security_group_ids
 }
 resource "stackit_image" "config" {
+  count           = var.keep_config_disk ? 1 : 0
   project_id      = var.project_id
   name            = "${var.name}-config-${var.config_revision}"
   disk_format     = "qcow2"
-  local_file_path = "${path.module}/.generated/config.qcow2"
+  local_file_path = var.keep_config_disk ? "${path.module}/.generated/config.qcow2" : "${path.module}/README.md"
   min_disk_size   = 1
   lifecycle {
     precondition {
@@ -35,6 +36,13 @@ resource "stackit_volume" "boot" {
   }
 }
 resource "stackit_volume" "data" {
+  count = var.attach_data_disk ? 1 : 0
+  lifecycle {
+    precondition {
+      condition     = !var.keep_config_disk
+      error_message = "Set keep_config_disk=false and remove config before attaching data."
+    }
+  }
   project_id        = var.project_id
   name              = "${var.name}-data"
   availability_zone = var.availability_zone
@@ -42,6 +50,7 @@ resource "stackit_volume" "data" {
   performance_class = var.data_performance_class
 }
 resource "stackit_volume" "config" {
+  count             = var.keep_config_disk ? 1 : 0
   project_id        = var.project_id
   name              = "${var.name}-config"
   availability_zone = var.availability_zone
@@ -49,11 +58,11 @@ resource "stackit_volume" "config" {
   performance_class = "storage_premium_perf1"
   source = {
     type = "image"
-    id   = stackit_image.config.image_id
+    id   = stackit_image.config[0].image_id
   }
 }
-# First creation is performed by bootstrap.py with ALL disks in the create
-# request, then imported here. Do not run an untargeted apply before import.
+# Initial DSX creation uses only boot + config. Attach data AFTER join and
+# config removal. Do not run an untargeted apply before VM import.
 resource "stackit_server" "dsx" {
   project_id        = var.project_id
   name              = var.name
@@ -83,12 +92,14 @@ resource "stackit_server" "dsx" {
   }
 }
 resource "stackit_server_volume_attach" "config" {
+  count      = var.keep_config_disk ? 1 : 0
   project_id = var.project_id
   server_id  = stackit_server.dsx.server_id
-  volume_id  = stackit_volume.config.volume_id
+  volume_id  = stackit_volume.config[0].volume_id
 }
 resource "stackit_server_volume_attach" "data" {
+  count      = var.attach_data_disk ? 1 : 0
   project_id = var.project_id
   server_id  = stackit_server.dsx.server_id
-  volume_id  = stackit_volume.data.volume_id
+  volume_id  = stackit_volume.data[0].volume_id
 }

@@ -1,114 +1,55 @@
-# Add a DSX to the standalone STACKIT Anvil
+# DSX deployment: bootstrap first, data disk later
 
-This separate root configuration/state adds one DSX to an existing Anvil.
-For a fresh pair, first deploy the Anvil using [../README.md](../README.md),
-verify its admin login/API, then run this workflow. The existing Anvil is not
-managed or recreated by this DSX state.
+Follow the complete [retest checklist](../RETEST.md). This root has its own state;
+the parent root manages the Anvil. Keep both states and local tfvars private.
 
-## Defaults and prerequisites
+## Phases
 
-Same clean Hammerspace 5.2.14-1267 image (uefi=false), region/AZ and authentication
-as the Anvil. DSX defaults: g1a.16d (the already tested VM type), 200 GB boot and
-1000 GB data, both storage_premium_perf1, plus a 1 GB config disk. Agent NEVER.
-These are PoC defaults, not a production sizing recommendation.
+| Phase | keep_config_disk | attach_data_disk | Result |
+|---|---|---|---|
+| Bootstrap | true | false | Boot + YAML config disk; no data disk |
+| Config cleanup, after verified cluster join | false | false | Detach/delete config disk and image |
+| Data | false | true | Create and live-attach 1000 GB data disk |
 
-Security groups must allow bidirectional Anvil/DSX communication, including Salt
-TCP 4505/4506, and required Hammerspace storage traffic. A group named "default"
-does not prove this. The deploying Linux host must reach the Anvil API on 8443.
-Use the same cluster domain and admin password as the Anvil.
+Persist these flags in terraform.tfvars at each phase. Do not use transient
+-var overrides: a later apply with old defaults could recreate the config disk
+or delete the data disk. Never set attach_data_disk=false on a used volume
+without first decommissioning it safely in Hammerspace.
 
-## Deployment
+Defaults: g1a.16d, boot 200 GB storage_premium_perf1, data 1000 GB
+storage_premium_perf1, config 1 GB, agent NEVER; Hammerspace 5.2.14-1267/BIOS.
+The public API management endpoint belongs to the Anvil, not the DSX.
 
-Run from this dsx directory with Terraform >=1.6, Python >=3.9, qemu-img and
-STACKIT CLI. Set STACKIT_SERVICE_ACCOUNT_KEY_PATH and activate the CLI service
-account as documented in the parent. OpenTofu users replace terraform with tofu
-and pass --tool tofu to the helper (before its subcommand).
+add_volumes=false remains the installer setting. Based on the user's appliance
+experience it disables local volume setup (XFS/mount/export) as well as cluster
+volume registration. Earlier statements claiming it only controls cluster
+registration were too broad and are superseded by this workflow.
 
-```bash
-cd terraform/dsx
-umask 077
-cp terraform.tfvars.example terraform.tfvars
-# Edit IDs and anvil_ip. Do not put the cluster password into tfvars.
-terraform init
-python3 ../scripts/bootstrap.py --role dsx init-artifacts
-terraform validate
+After join, inspect drives/local volumes before removing the config disk. If
+it was unexpectedly initialized or registered, stop and clean it up through
+Hammerspace before detaching. No guest filesystem is modified by Terraform.
 
-terraform plan -target=stackit_network_interface.dsx
-terraform apply -target=stackit_network_interface.dsx
-# Targeted applies may omit new outputs. Refresh-only changes no cloud resources.
-terraform apply -refresh-only
-terraform output network
+The data phase only attaches a cloud disk. Inspect it with drive-list, then
+use Hammerspace logical-volume-create for the verified device and register the
+resulting logical volume/export with volume-add or the documented REST workflow
+in RETEST.md. Do not run generic mkfs/mount/export commands behind Hammerspace.
 
-# Use the SAME domain/NTP as the Anvil and its actual interface name.
-python3 ../scripts/bootstrap.py --role dsx prepare \
-  --domain poc.example --ntp pool.ntp.org --interface eth0
+The exact REST endpoint equivalent of logical-volume-create remains unverified.
+No guessed API request or automatic guest formatting is included.
 
-terraform plan -target=stackit_volume.boot -target=stackit_volume.data -target=stackit_volume.config
-terraform apply -target=stackit_volume.boot -target=stackit_volume.data -target=stackit_volume.config
-terraform apply -refresh-only
-terraform output bootstrap
+## Migration warning
 
-python3 ../scripts/bootstrap.py --role dsx create
-terraform plan
-```
+This workflow is intended for the clean redeployment requested by the owner.
+Moved blocks preserve Terraform addresses when adding count, but the new defaults
+do NOT preserve an existing data disk: an existing deployed state must retain
+attach_data_disk=true when it owns live data. The phase guard additionally
+requires config removal before data can be attached.
+Review migration plans; do not apply this fresh-deployment sequence to a live cluster.
 
-The prompt requests the existing Anvil admin password twice; the helper verifies
-it against https://ANVIL_IP:8443/mgmt/v1.2/rest/nodes before building the config
-disk. Self-signed certificates are accepted for this PoC (as with curl -k).
-A password/API/network failure stops preparation; it does not create a DSX VM.
+VM deletion remains protected. Import limitations for boot source, NIC list and
+agent policy remain handled as in the parent. The bootstrap helper imports the
+DSX server and config attachment only; it never attaches/imports a data disk at
+initial creation. --skip-anvil-check skips only the deploying host's API check.
 
-If the deploying host has no route/VPN into the private STACKIT network, skip only
-this deploy-host API/password check:
-
-```bash
-python3 ../scripts/bootstrap.py --role dsx prepare \\
-  --domain poc.example --ntp pool.ntp.org --interface eth0 --skip-anvil-check
-```
-
-The existing Anvil password must still be supplied correctly. YAML generation,
-password confirmation, assigned static DSX IP and Anvil join address are unchanged.
-The DSX joins the Anvil from inside STACKIT. This flag does not bypass cluster
-authentication or change any security-group rules. By default the API check remains enabled.
-
-The DSX YAML uses static IPv4 assigned to its own STACKIT NIC, cluster.metadata.ips
-pointing at the Anvil, storage/portal features and add_node=true. GenericProv's
-ASCII YAML disk mechanism is reused. All disks are attached at VM creation,
-then the server and config/data attachments are imported into this separate state.
-The output metadata_id is retained as an internal helper compatibility field;
-in this DSX state it refers to the DSX DATA volume.
-
-Check the Anvil UI/CLI node list for a managed/online DSX. Verify its local data
-disk before registering it as a writable backend volume in the Anvil UI. The
-Anvil management URL remains the Anvil IP; DSX management_url is diagnostic.
-
-## Config disk and volume registration
-
-Default add_volumes=false deliberately joins the DSX without automatically
-registering its discovered disks as cluster volumes. Hammerspace may format
-ALL non-boot disks during DSX first boot, including the 1 GB config disk, even
-with add_volumes=false. After joining, register only the intended 1000 GB data
-volume; do not register the small config disk.
-
-Optional prepare --register-volumes sets add_volumes=true. This can register the
-config disk as a junk 1 GB storage volume too. Inspect and remove that volume
-through Hammerspace before detaching/deleting its cloud disk. Do not enable this
-unless you intend to perform that cleanup.
-
-After verifying the DSX join and storage, remove the config image, config volume,
-config attachment blocks and bootstrap output config_id reference, review the
-cleanup plan and apply. Do not remove the data attachment/volume. Then remove
-local .generated artifacts. Config image/volume must be treated as containing
-the plaintext cluster password regardless of what the guest does to its disk.
-
-VM deletion is protected by prevent_destroy. Imported boot source, NIC list and
-agent policy are ignored due provider 0.120.0 import limitations; verify actual
-NIC/boot/data attachments in STACKIT. Do not run a full apply before bootstrap
-and import. On interrupted imports inspect the VM and use --resume-server-id as
-described in the parent README.
-
-## Validation status
-
-Anvil installation, static IP and admin password via ASCII config disk have been
-confirmed in the user-run STACKIT PoC. DSX creation/join and local-volume state must be verified on resume.
-No Nebius-specific GRUB/phantom-disk patches are applied. No HA is configured.
-Keep generated disks, state, tfvars and credentials outside Git.
+Local tests/schema checks are not a substitute for live validation: this new
+two-phase flow still needs the next user-run test.

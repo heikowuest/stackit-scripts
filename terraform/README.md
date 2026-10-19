@@ -1,5 +1,7 @@
 # Hammerspace on STACKIT: Anvil and DSX prototype
 
+For the fresh Anvil + two-phase DSX test, follow the complete [retest TODO and commands](RETEST.md).
+
 The standalone Anvil has been installed successfully in the STACKIT PoC, including
 static IP configuration and admin password. The DSX extension awaits its first live
 test. Uses the existing

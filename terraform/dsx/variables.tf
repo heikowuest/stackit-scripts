@@ -58,3 +58,14 @@ variable "data_performance_class" {
   type    = string
   default = "storage_premium_perf1"
 }
+
+variable "keep_config_disk" {
+  type        = bool
+  default     = true
+  description = "Phase 1 true; false after join deletes config attachment, disk and image."
+}
+variable "attach_data_disk" {
+  type        = bool
+  default     = false
+  description = "Phase 3 true: create and attach data only after config removal."
+}

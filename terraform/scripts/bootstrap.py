@@ -146,8 +146,13 @@ def create(args):
     data = output(args.tool, "bootstrap")
     if data.get("role", "anvil") != getattr(args, "role", "anvil"):
         raise ValueError("Wrong working directory/state for this role")
-    if any(not data.get(k) for k in
-           ("project_id", "region", "name", "nic_id", "boot_id", "metadata_id", "config_id")):
+    role = getattr(args, "role", "anvil")
+    required = ["project_id", "region", "name", "nic_id", "boot_id", "config_id"]
+    if role == "anvil":
+        required.append("metadata_id")
+    elif data.get("data_volume_id") or data.get("metadata_id"):
+        raise ValueError("DSX bootstrap must not include data; attach it after join/config cleanup")
+    if any(not data.get(k) for k in required):
         raise ValueError("Infrastructure outputs incomplete; apply the volume targets first")
     cli = ["stackit", "--project-id", data["project_id"], "--region", data["region"]]
     servers = json.loads(run(cli + ["server", "list", "-o", "json"], capture=True))
@@ -176,7 +181,7 @@ def create(args):
             "--network-interface-ids", data["nic_id"],
             "--boot-volume-source-type", "volume",
             "--boot-volume-source-id", data["boot_id"],
-            "--volumes", data["config_id"] + "," + data["metadata_id"],
+            "--volumes", data["config_id"] if role == "dsx" else data["config_id"] + "," + data["metadata_id"],
             "--agent-provisioning-policy", "NEVER",
             "--assume-yes", "-o", "json"], capture=True))
         server_id = answer.get("id") or answer.get("serverId")
@@ -184,14 +189,14 @@ def create(args):
         raise ValueError("No server ID returned; inspect STACKIT before retrying")
     print("Server ID:", server_id)
     state = set(tf(args.tool, "state", "list", capture=True).splitlines())
-    role = getattr(args, "role", "anvil")
     base = data["project_id"] + "," + data["region"] + "," + server_id
     imports = [
         ("stackit_server." + role, base),
-        ("stackit_server_volume_attach.config", base + "," + data["config_id"]),
-        ("stackit_server_volume_attach." + ("data" if role == "dsx" else "metadata"),
-         base + "," + data["metadata_id"]),
+        ("stackit_server_volume_attach.config[0]" if role == "dsx"
+         else "stackit_server_volume_attach.config", base + "," + data["config_id"]),
     ]
+    if role == "anvil":
+        imports.append(("stackit_server_volume_attach.metadata", base + "," + data["metadata_id"]))
     for address, identifier in imports:
         if address not in state:
             tf(args.tool, "import", address, identifier)

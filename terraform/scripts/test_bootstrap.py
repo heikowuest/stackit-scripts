@@ -85,12 +85,14 @@ class BootstrapTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 b.create(SimpleNamespace(tool="terraform", resume_server_id=None))
 
-    def test_dsx_create_imports_dsx_and_data_attachment(self):
+    def test_dsx_create_has_only_config_disk_and_no_data_import(self):
         data = dict(project_id="p", region="r", name="dsx", machine_type="g1a.16d",
                     availability_zone="r-1", role="dsx",
-                    nic_id="nic", boot_id="boot", metadata_id="data", config_id="cfg")
+                    nic_id="nic", boot_id="boot", metadata_id=None, config_id="cfg")
         calls = []
+        cli_calls = []
         def run(args, capture=False):
+            cli_calls.append(args)
             return "[]" if "list" in args else json.dumps({"id": "dsx-server"})
         def tf(tool, *args, capture=False):
             calls.append(args)
@@ -98,8 +100,9 @@ class BootstrapTests(unittest.TestCase):
         with patch.object(b, "output", return_value=data), patch.object(b, "run", side_effect=run), patch.object(b, "tf", side_effect=tf):
             b.create(SimpleNamespace(tool="terraform", role="dsx", resume_server_id=None))
         imports = [c[1] for c in calls if c[0] == "import"]
-        self.assertEqual(imports, ["stackit_server.dsx", "stackit_server_volume_attach.config",
-                                  "stackit_server_volume_attach.data"])
+        self.assertEqual(imports, ["stackit_server.dsx", "stackit_server_volume_attach.config[0]"])
+        create = next(c for c in cli_calls if "create" in c)
+        self.assertEqual(create[create.index("--volumes") + 1], "cfg")
 
     def test_dsx_api_failure_does_not_write_config_disk(self):
         args = SimpleNamespace(tool="terraform", role="dsx")
@@ -126,6 +129,13 @@ class BootstrapTests(unittest.TestCase):
             self.assertIn('add_node: true', yaml)
             runner.assert_called_once()
             self.assertEqual(runner.call_args.args[0][:2], ["qemu-img", "convert"])
+
+    def test_dsx_bootstrap_rejects_early_data_disk(self):
+        data = dict(role="dsx", metadata_id="unexpected-data")
+        with patch.object(b, "output", return_value=data), patch.object(b, "run") as runner:
+            with self.assertRaises(ValueError):
+                b.create(SimpleNamespace(tool="terraform", role="dsx"))
+            runner.assert_not_called()
 
     def test_wrong_state_role_rejected_before_cli(self):
         with patch.object(b, "output", return_value={"role":"anvil"}), patch.object(b, "run") as runner:

@@ -2,6 +2,9 @@ project_id         = "<PROJECT_ID>"
 network_id         = "<NETWORK_ID>"
 image_id           = "<HAMMERSPACE_5_2_14_1267_IMAGE_ID>"
 security_group_ids = ["<SECURITY_GROUP_ID>"]
-anvil_ip           = "<ANVIL_PRIVATE_IP>"
-# Defaults: hs-poc-dsx, g1a.16d, boot 200 GB, data 1000 GB (1 TB).
-# data_volume_size = 1000
+anvil_ip           = "<NEW_ANVIL_PRIVATE_IP>"
+
+# Persist phase changes here; see ../RETEST.md.
+keep_config_disk = true
+attach_data_disk = false
+data_volume_size = 1000

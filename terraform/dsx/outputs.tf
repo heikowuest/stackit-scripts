@@ -18,8 +18,8 @@ output "bootstrap" {
     availability_zone = var.availability_zone
     nic_id            = stackit_network_interface.dsx.network_interface_id
     boot_id           = stackit_volume.boot.volume_id
-    metadata_id       = stackit_volume.data.volume_id
-    config_id         = stackit_volume.config.volume_id
+    metadata_id       = null
+    config_id         = try(stackit_volume.config[0].volume_id, null)
   }
 }
 output "management_url" {
@@ -31,4 +31,8 @@ output "server_id" {
 
 output "dsx_ip" {
   value = stackit_network_interface.dsx.ipv4
+}
+
+output "data_volume_id" {
+  value = try(stackit_volume.data[0].volume_id, null)
 }
