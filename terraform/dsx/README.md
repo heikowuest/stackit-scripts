@@ -40,7 +40,12 @@ No guessed API request or automatic guest formatting is included.
 ## Migration warning
 
 This workflow is intended for the clean redeployment requested by the owner.
-Moved blocks preserve Terraform addresses when adding count, but the new defaults
+Migration blocks are supplied as moved.tf.example, NOT loaded by default, because
+active moved blocks conflict with the targeted fresh-bootstrap plans. Only for
+an existing pre-count deployment, back up state and enable the example explicitly
+before a reviewed migration plan. Do not enable it for a fresh deployment.
+
+The new defaults
 do NOT preserve an existing data disk: an existing deployed state must retain
 attach_data_disk=true when it owns live data. The phase guard additionally
 requires config removal before data can be attached.
